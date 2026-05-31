@@ -1,6 +1,1 @@
-# Smart Home Simulator — Python Dependencies
-# No external libraries needed for Part 1.
-# We only use Python's built-in modules (abc, datetime, typing).
-
-# Future parts will add:
-# pytest   (Part 10 - testing)
+pytest

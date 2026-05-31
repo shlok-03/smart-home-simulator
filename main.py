@@ -1,141 +1,232 @@
 """
-main.py  —  Part 4 Demo
-Demonstrating all 4 required design patterns.
+main.py  —  Full System Demo
+All parts working together: devices, sensors, automation, users,
+notifications, energy monitoring, and persistence.
 """
 
-from src.devices.device_factory      import DeviceFactory
-from src.house.logger                import Logger
-from src.automation.event_bus        import EventBus
-from src.energy.energy_strategy      import EnergyManager
-from src.sensors.motion_sensor       import MotionSensor
-from src.sensors.smoke_sensor        import SmokeSensor
-from src.rooms.room  import Room
-from src.house.house import House
+from src.devices.device_factory          import DeviceFactory
+from src.sensors.motion_sensor           import MotionSensor
+from src.sensors.temperature_sensor      import TemperatureSensor
+from src.sensors.smoke_sensor            import SmokeSensor
+from src.sensors.door_sensor             import DoorSensor
+from src.automation.automation_rule      import AutomationRule
+from src.automation.automation_engine    import AutomationEngine
+from src.automation.event_bus            import EventBus
+from src.users.user                      import Owner, Guest, Technician, Permission
+from src.notifications.notification_service import NotificationService
+from src.energy.energy_monitor           import EnergyMonitor
+from src.energy.energy_strategy          import EnergyManager
+from src.persistence.json_persistence    import JsonPersistence
+from src.house.logger                    import Logger
+from src.rooms.room                      import Room
+from src.house.house                     import House
 
 
-def main():
-    print("\n" + "="*55)
-    print("   🏠  Smart Home Simulator — Part 4 Demo")
-    print("        Design Patterns")
-    print("="*55)
-
-    # ----------------------------------------------------------------
-    # PATTERN 1 — FACTORY
-    # Create devices without knowing their class names
-    # ----------------------------------------------------------------
-    print("\n--- 🏭 PATTERN 1: FACTORY ---")
-
+def setup_house():
+    """Build and return a fully configured smart home."""
     home    = House("The Johnson Smart Home", "42 Maple Avenue")
-    hallway = Room("room_001", "Hallway",     "other")
-    kitchen = Room("room_002", "Kitchen",     "kitchen")
+    hallway = Room("room_001", "Hallway",      "other")
+    kitchen = Room("room_002", "Kitchen",      "kitchen")
+    bedroom = Room("room_003", "Bedroom",      "bedroom")
+    garage  = Room("room_004", "Garage",       "garage")
+
     home.add_room(hallway)
     home.add_room(kitchen)
+    home.add_room(bedroom)
+    home.add_room(garage)
 
-    # The factory handles choosing the right class
-    hall_light = DeviceFactory.create("LIGHT",      "dev_001", "Hallway Light", "Hallway")
-    thermo     = DeviceFactory.create("THERMOSTAT", "dev_002", "Kitchen Thermostat", "Kitchen")
-    front_lock = DeviceFactory.create("DOOR_LOCK",  "dev_003", "Front Door Lock", "Hallway", pin="1234")
-    cam        = DeviceFactory.create("CAMERA",     "dev_004", "Hallway Camera", "Hallway")
-    speaker    = DeviceFactory.create("SPEAKER",    "dev_005", "Living Room Speaker", "Hallway")
+    # Create devices via factory
+    hall_light  = DeviceFactory.create("LIGHT",     "dev_001", "Hallway Light",   "Hallway")
+    bed_light   = DeviceFactory.create("LIGHT",     "dev_002", "Bedroom Light",   "Bedroom")
+    thermo      = DeviceFactory.create("THERMOSTAT","dev_003", "Main Thermostat", "Kitchen")
+    front_lock  = DeviceFactory.create("DOOR_LOCK", "dev_004", "Front Door Lock", "Hallway", pin="1234")
+    garage_lock = DeviceFactory.create("DOOR_LOCK", "dev_005", "Garage Lock",     "Garage",  pin="1234")
+    cam         = DeviceFactory.create("CAMERA",    "dev_006", "Hallway Camera",  "Hallway")
+    speaker     = DeviceFactory.create("SPEAKER",   "dev_007", "Kitchen Speaker", "Kitchen")
 
     hallway.add_device(hall_light)
     hallway.add_device(front_lock)
     hallway.add_device(cam)
     kitchen.add_device(thermo)
     kitchen.add_device(speaker)
+    bedroom.add_device(bed_light)
+    garage.add_device(garage_lock)
 
-    print(f"\n  Supported device types: {DeviceFactory.supported_types()}")
+    # Start devices
+    for dev in home.get_all_devices():
+        dev.turn_on()
 
-    # ----------------------------------------------------------------
-    # PATTERN 2 — SINGLETON (Logger)
-    # Both variables point to the exact same object
-    # ----------------------------------------------------------------
-    print("\n--- 📋 PATTERN 2: SINGLETON (Logger) ---")
+    return home
 
-    log_a = Logger()
-    log_b = Logger()
 
-    print(f"  log_a is log_b: {log_a is log_b}")   # must print True
-
-    log_a.info("main",     "Smart home system started")
-    log_a.info("Factory",  "Created 5 devices via DeviceFactory")
-    log_b.warning("main",  "This was logged via log_b — same object as log_a")
-
-    print(f"  Total log entries: {log_a.total_entries()}")
-    log_a.print_recent(3)
-
-    # ----------------------------------------------------------------
-    # PATTERN 3 — OBSERVER (EventBus)
-    # Sensors publish; handlers subscribe — they never meet directly
-    # ----------------------------------------------------------------
-    print("\n--- 📡 PATTERN 3: OBSERVER (EventBus) ---")
-
+def setup_automation(home):
+    """Register all automation rules and return the engine."""
+    notif_service = NotificationService()
+    engine        = AutomationEngine(home, notif_service)
     bus           = EventBus()
-    motion_sensor = MotionSensor("sen_001", "Hallway Motion", "Hallway")
-    smoke_sensor  = SmokeSensor( "sen_002", "Kitchen Smoke",  "Kitchen")
 
-    # Subscriber 1: the automation handler
-    def on_motion_event(event):
-        print(f"  [AutomationEngine] reacting to '{event['event_type']}'")
-        if event["event_type"] == "motion_detected":
-            hall_light.turn_on()
+    # Rule 1: motion in hallway → turn on hallway light + camera records
+    rule1 = AutomationRule(
+        rule_id="rule_001", name="Hallway Motion → Light On",
+        trigger_event="motion_detected",
+        conditions=[{"field": "room", "operator": "equals", "value": "Hallway"}],
+        actions=[
+            {"type": "turn_on", "device_id": "dev_001"},
+            {"type": "start_recording", "device_id": "dev_006"},
+            {"type": "notify", "message": "Motion in hallway", "priority": "normal"},
+        ]
+    )
 
-    # Subscriber 2: the logger (uses wildcard — hears everything)
-    def log_all_events(event):
-        Logger().info("EventBus", f"{event['event_type']} from {event.get('sensor_name','?')}")
+    # Rule 2: no motion → lights off
+    rule2 = AutomationRule(
+        rule_id="rule_002", name="No Motion → Lights Off",
+        trigger_event="motion_cleared",
+        actions=[
+            {"type": "turn_off", "device_id": "dev_001"},
+            {"type": "notify", "message": "Hallway clear — lights off", "priority": "low"},
+        ]
+    )
 
-    # Subscriber 3: emergency handler
-    def on_smoke_event(event):
-        if event["event_type"] == "alarm_triggered":
-            print(f"  [EmergencyHandler] 🚨 Unlocking all doors!")
-            front_lock.unlock("emergency_system", pin="1234")
+    # Rule 3: smoke alarm → unlock all doors
+    rule3 = AutomationRule(
+        rule_id="rule_003", name="Fire Alarm → Unlock Doors",
+        trigger_event="alarm_triggered",
+        actions=[
+            {"type": "unlock", "device_id": "dev_004", "pin": "1234"},
+            {"type": "unlock", "device_id": "dev_005", "pin": "1234"},
+            {"type": "notify", "message": "FIRE! All doors unlocked for evacuation",
+             "priority": "critical"},
+        ]
+    )
 
-    bus.subscribe("motion_detected", on_motion_event)
-    bus.subscribe("alarm_triggered", on_smoke_event)
-    bus.subscribe_all(log_all_events)   # wildcard — catches every topic
+    # Rule 4: temperature too low → thermostat heats up
+    rule4 = AutomationRule(
+        rule_id="rule_004", name="Cold Alert → Heat Up",
+        trigger_event="temperature_too_low",
+        actions=[
+            {"type": "set_temperature", "device_id": "dev_003", "value": 23.0},
+            {"type": "notify", "message": "Temperature too low — thermostat adjusted",
+             "priority": "high"},
+        ]
+    )
 
-    # Wire sensors to the event bus (sensors publish, bus routes)
-    def publish_sensor_event(event):
+    engine.add_rule(rule1)
+    engine.add_rule(rule2)
+    engine.add_rule(rule3)
+    engine.add_rule(rule4)
+
+    return engine, notif_service
+
+
+def wire_sensors(home, sensors):
+    """Connect every sensor to the EventBus so the engine receives events."""
+    bus = EventBus()
+    def publish(event):
         bus.publish(event["event_type"], event)
+    for sensor in sensors:
+        sensor.add_listener(publish)
 
-    motion_sensor.add_listener(publish_sensor_event)
-    smoke_sensor.add_listener(publish_sensor_event)
 
-    # Trigger events — watch the bus route them automatically
+def main():
+    print("\n" + "="*55)
+    print("   🏠  Smart Home Simulator — Full System Demo")
+    print("="*55)
+
+    # ----------------------------------------------------------------
+    # BUILD HOUSE + AUTOMATION
+    # ----------------------------------------------------------------
+    home              = setup_house()
+    engine, notifs    = setup_automation(home)
+
+    # ----------------------------------------------------------------
+    # USERS
+    # ----------------------------------------------------------------
+    print("\n--- 👤 USER SYSTEM ---")
+    alice  = Owner     ("u_001", "Alice",  "alice@home.com")
+    bob    = Guest     ("u_002", "Bob",    "bob@guest.com")
+    carlos = Technician("u_003", "Carlos", "carlos@tech.com")
+
+    bob.assign_device("dev_007")   # Bob can only use the kitchen speaker
+
+    print(f"  {alice}")
+    print(f"  {bob}")
+    print(f"  {carlos}")
+
+    # Permission check
+    print(f"\n  Alice can manage devices : {alice.can_perform(Permission.MANAGE_DEVICES)}")
+    print(f"  Bob   can manage devices : {bob.can_perform(Permission.MANAGE_DEVICES)}")
+    print(f"  Bob   can use dev_007    : {bob.can_use_device('dev_007')}")
+    print(f"  Carlos can run diagnostics: {carlos.can_perform(Permission.RUN_DIAGNOSTICS)}")
+
+    # Technician diagnostic
+    camera = home.find_device("dev_006")
+    carlos.run_diagnostic(camera)
+
+    # ----------------------------------------------------------------
+    # SENSORS + SCENARIOS
+    # ----------------------------------------------------------------
+    print("\n--- 🚦 SETTING UP SENSORS ---")
+    motion_sen = MotionSensor      ("sen_001", "Hallway Motion", "Hallway")
+    temp_sen   = TemperatureSensor ("sen_002", "Kitchen Temp",   "Kitchen")
+    smoke_sen  = SmokeSensor       ("sen_003", "Kitchen Smoke",  "Kitchen")
+    door_sen   = DoorSensor        ("sen_004", "Front Door",     "Hallway")
+
+    wire_sensors(home, [motion_sen, temp_sen, smoke_sen, door_sen])
+    engine.list_rules()
+
+    print("\n--- 🏃 SCENARIO 1: Motion in hallway ---")
+    motion_sen.detect_motion("Hallway")
+
+    print("\n--- 🕊️  SCENARIO 2: Hallway clears ---")
+    motion_sen.clear_motion()
+
+    print("\n--- 🌡️  SCENARIO 3: Kitchen gets cold ---")
+    temp_sen.read_temperature(12.0)
+
+    print("\n--- 💨 SCENARIO 4: Fire alarm ---")
+    smoke_sen.detect_smoke(150.0, carbon_monoxide=True)
+
+    # ----------------------------------------------------------------
+    # NOTIFICATIONS INBOX
+    # ----------------------------------------------------------------
     print()
-    hall_light.turn_on()
-    cam.turn_on()
-    motion_sensor.detect_motion("Hallway")
-    smoke_sensor.detect_smoke(150.0, carbon_monoxide=True)
+    notifs.print_all()
 
     # ----------------------------------------------------------------
-    # PATTERN 4 — STRATEGY (EnergyManager)
-    # Swap the whole energy behaviour with one line
+    # ENERGY REPORT
     # ----------------------------------------------------------------
-    print("\n--- ⚡ PATTERN 4: STRATEGY (EnergyManager) ---")
+    monitor = EnergyMonitor(home)
+    monitor.generate_report()
 
-    manager  = EnergyManager()
-    all_devs = home.get_all_devices()
+    # ----------------------------------------------------------------
+    # ENERGY STRATEGY
+    # ----------------------------------------------------------------
+    print("\n--- ⚡ SWITCHING TO ECO MODE ---")
+    mgr = EnergyManager()
+    mgr.set_strategy("eco")
+    mgr.apply(home.get_all_devices())
 
-    # Turn everything on first so strategies have something to work with
-    for d in all_devs:
-        d.turn_on()
+    # ----------------------------------------------------------------
+    # PERSISTENCE
+    # ----------------------------------------------------------------
+    print("\n--- 💾 SAVING AND RELOADING HOUSE ---")
+    repo = JsonPersistence("data/smart_home_save.json")
+    repo.save(home)
 
-    manager.set_strategy("eco")
-    manager.apply(all_devs)
+    loaded = repo.load()
+    if loaded:
+        print(f"  Reloaded: {loaded.name} "
+              f"| {len(loaded.get_all_rooms())} rooms "
+              f"| {len(loaded.get_all_devices())} devices")
 
-    manager.set_strategy("night")
-    manager.apply(all_devs)
+    # ----------------------------------------------------------------
+    # FINAL LOG
+    # ----------------------------------------------------------------
+    print("\n--- 📋 LOG SNAPSHOT ---")
+    Logger().print_recent(8)
 
-    manager.set_strategy("away")
-    manager.apply(all_devs)
-
-    # Show final log
-    print("\n--- 📋 FINAL LOG SNAPSHOT ---")
-    Logger().print_recent(6)
-
-    print(f"\n✅ Part 4 complete: All 4 design patterns demonstrated!")
-    print(f"   Next → Part 5: Automation Engine 🤖\n")
+    print("\n✅ Full system demo complete!\n")
+    print("   Run tests with:  pytest tests/ -v\n")
 
 
 if __name__ == "__main__":

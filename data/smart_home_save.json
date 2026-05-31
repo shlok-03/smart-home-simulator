@@ -1,0 +1,92 @@
+{
+  "house": {
+    "name": "The Johnson Smart Home",
+    "address": "42 Maple Avenue",
+    "rooms": [
+      {
+        "id": "room_001",
+        "name": "Hallway",
+        "type": "other",
+        "devices": [
+          {
+            "id": "dev_001",
+            "name": "Hallway Light",
+            "power_state": false,
+            "device_type": "LIGHT",
+            "brightness": 100,
+            "colour_mode": "white"
+          },
+          {
+            "id": "dev_004",
+            "name": "Front Door Lock",
+            "power_state": true,
+            "device_type": "DOOR_LOCK",
+            "is_locked": false,
+            "security_level": "medium"
+          },
+          {
+            "id": "dev_006",
+            "name": "Hallway Camera",
+            "power_state": true,
+            "device_type": "CAMERA",
+            "motion_detect": true
+          }
+        ]
+      },
+      {
+        "id": "room_002",
+        "name": "Kitchen",
+        "type": "kitchen",
+        "devices": [
+          {
+            "id": "dev_003",
+            "name": "Main Thermostat",
+            "power_state": true,
+            "device_type": "THERMOSTAT",
+            "target_temp": 20.0,
+            "current_temp": 18.0,
+            "eco_mode": true
+          },
+          {
+            "id": "dev_007",
+            "name": "Kitchen Speaker",
+            "power_state": true,
+            "device_type": "SPEAKER",
+            "volume": 50
+          }
+        ]
+      },
+      {
+        "id": "room_003",
+        "name": "Bedroom",
+        "type": "bedroom",
+        "devices": [
+          {
+            "id": "dev_002",
+            "name": "Bedroom Light",
+            "power_state": true,
+            "device_type": "LIGHT",
+            "brightness": 50,
+            "colour_mode": "white"
+          }
+        ]
+      },
+      {
+        "id": "room_004",
+        "name": "Garage",
+        "type": "garage",
+        "devices": [
+          {
+            "id": "dev_005",
+            "name": "Garage Lock",
+            "power_state": true,
+            "device_type": "DOOR_LOCK",
+            "is_locked": false,
+            "security_level": "medium"
+          }
+        ]
+      }
+    ]
+  },
+  "saved_at": "2026-05-31T20:13:50.543906"
+}

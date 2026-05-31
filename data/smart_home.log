@@ -4,3 +4,10 @@
 [2026-05-31T20:05:54] INFO     | EventBus                  | motion_detected from Hallway Motion
 [2026-05-31T20:05:54] INFO     | EventBus                  | smoke_detected from Kitchen Smoke
 [2026-05-31T20:05:54] INFO     | EventBus                  | alarm_triggered from Kitchen Smoke
+[2026-05-31T20:13:50] INFO     | AutomationEngine          | Turned ON Hallway Light
+[2026-05-31T20:13:50] INFO     | AutomationEngine          | Notification sent: Motion in hallway
+[2026-05-31T20:13:50] INFO     | AutomationEngine          | Turned OFF Hallway Light
+[2026-05-31T20:13:50] INFO     | AutomationEngine          | Notification sent: Hallway clear — lights off
+[2026-05-31T20:13:50] INFO     | AutomationEngine          | Notification sent: Temperature too low — thermostat adjusted
+[2026-05-31T20:13:50] INFO     | AutomationEngine          | Notification sent: FIRE! All doors unlocked for evacuation
+[2026-05-31T20:13:53] INFO     | test                      | message one
