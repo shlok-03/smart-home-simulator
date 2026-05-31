@@ -1,134 +1,141 @@
 """
-main.py  —  Part 3 Demo
-Sensors detecting events and notifying devices via listeners.
+main.py  —  Part 4 Demo
+Demonstrating all 4 required design patterns.
 """
 
-from src.devices.smart_light      import SmartLight
-from src.devices.smart_thermostat import SmartThermostat
-from src.devices.smart_door_lock  import SmartDoorLock
-from src.devices.security_camera  import SecurityCamera
-from src.sensors.motion_sensor      import MotionSensor
-from src.sensors.temperature_sensor import TemperatureSensor
-from src.sensors.smoke_sensor       import SmokeSensor
-from src.sensors.door_sensor        import DoorSensor
+from src.devices.device_factory      import DeviceFactory
+from src.house.logger                import Logger
+from src.automation.event_bus        import EventBus
+from src.energy.energy_strategy      import EnergyManager
+from src.sensors.motion_sensor       import MotionSensor
+from src.sensors.smoke_sensor        import SmokeSensor
 from src.rooms.room  import Room
 from src.house.house import House
 
 
 def main():
     print("\n" + "="*55)
-    print("   🏠  Smart Home Simulator — Part 3 Demo")
+    print("   🏠  Smart Home Simulator — Part 4 Demo")
+    print("        Design Patterns")
     print("="*55)
 
     # ----------------------------------------------------------------
-    # Build house + rooms
+    # PATTERN 1 — FACTORY
+    # Create devices without knowing their class names
     # ----------------------------------------------------------------
+    print("\n--- 🏭 PATTERN 1: FACTORY ---")
+
     home    = House("The Johnson Smart Home", "42 Maple Avenue")
     hallway = Room("room_001", "Hallway",     "other")
     kitchen = Room("room_002", "Kitchen",     "kitchen")
     home.add_room(hallway)
     home.add_room(kitchen)
 
-    # ----------------------------------------------------------------
-    # Create devices
-    # ----------------------------------------------------------------
-    hall_light = SmartLight("dev_001", "Hallway Light")
-    front_lock = SmartDoorLock("dev_002", "Front Door Lock", pin="1234")
-    cam        = SecurityCamera("dev_003", "Hallway Camera")
-    thermo     = SmartThermostat("dev_004", "Kitchen Thermostat")
+    # The factory handles choosing the right class
+    hall_light = DeviceFactory.create("LIGHT",      "dev_001", "Hallway Light", "Hallway")
+    thermo     = DeviceFactory.create("THERMOSTAT", "dev_002", "Kitchen Thermostat", "Kitchen")
+    front_lock = DeviceFactory.create("DOOR_LOCK",  "dev_003", "Front Door Lock", "Hallway", pin="1234")
+    cam        = DeviceFactory.create("CAMERA",     "dev_004", "Hallway Camera", "Hallway")
+    speaker    = DeviceFactory.create("SPEAKER",    "dev_005", "Living Room Speaker", "Hallway")
 
     hallway.add_device(hall_light)
     hallway.add_device(front_lock)
     hallway.add_device(cam)
     kitchen.add_device(thermo)
+    kitchen.add_device(speaker)
+
+    print(f"\n  Supported device types: {DeviceFactory.supported_types()}")
 
     # ----------------------------------------------------------------
-    # Create sensors
+    # PATTERN 2 — SINGLETON (Logger)
+    # Both variables point to the exact same object
     # ----------------------------------------------------------------
+    print("\n--- 📋 PATTERN 2: SINGLETON (Logger) ---")
+
+    log_a = Logger()
+    log_b = Logger()
+
+    print(f"  log_a is log_b: {log_a is log_b}")   # must print True
+
+    log_a.info("main",     "Smart home system started")
+    log_a.info("Factory",  "Created 5 devices via DeviceFactory")
+    log_b.warning("main",  "This was logged via log_b — same object as log_a")
+
+    print(f"  Total log entries: {log_a.total_entries()}")
+    log_a.print_recent(3)
+
+    # ----------------------------------------------------------------
+    # PATTERN 3 — OBSERVER (EventBus)
+    # Sensors publish; handlers subscribe — they never meet directly
+    # ----------------------------------------------------------------
+    print("\n--- 📡 PATTERN 3: OBSERVER (EventBus) ---")
+
+    bus           = EventBus()
     motion_sensor = MotionSensor("sen_001", "Hallway Motion", "Hallway")
-    temp_sensor   = TemperatureSensor("sen_002", "Kitchen Temp", "Kitchen",
-                                      low_threshold=15.0, high_threshold=28.0)
-    smoke_sensor  = SmokeSensor("sen_003", "Kitchen Smoke", "Kitchen")
-    door_sensor   = DoorSensor("sen_004",  "Front Door Sensor", "Hallway")
+    smoke_sensor  = SmokeSensor( "sen_002", "Kitchen Smoke",  "Kitchen")
 
-    # ----------------------------------------------------------------
-    # OBSERVER PATTERN — wire sensors to device reactions
-    #
-    # Instead of the sensor knowing about the light directly,
-    # we register a small "reaction" function as a listener.
-    # The sensor just fires an event; the function decides what to do.
-    # ----------------------------------------------------------------
-
-    # When motion is detected → turn on the hallway light + start camera
-    def on_motion(event):
+    # Subscriber 1: the automation handler
+    def on_motion_event(event):
+        print(f"  [AutomationEngine] reacting to '{event['event_type']}'")
         if event["event_type"] == "motion_detected":
             hall_light.turn_on()
-            cam.trigger_motion_alert(event["location"])
-        elif event["event_type"] == "motion_cleared":
-            hall_light.turn_off()
 
-    # When temperature changes → tell thermostat the new reading
-    def on_temperature(event):
-        if event["event_type"] == "temperature_changed":
-            thermo.update_current_temperature(event["temperature"])
+    # Subscriber 2: the logger (uses wildcard — hears everything)
+    def log_all_events(event):
+        Logger().info("EventBus", f"{event['event_type']} from {event.get('sensor_name','?')}")
 
-    # When smoke is detected at alarm level → unlock door for escape
-    def on_smoke(event):
+    # Subscriber 3: emergency handler
+    def on_smoke_event(event):
         if event["event_type"] == "alarm_triggered":
-            print("  🚨 EMERGENCY: unlocking front door for evacuation!")
+            print(f"  [EmergencyHandler] 🚨 Unlocking all doors!")
             front_lock.unlock("emergency_system", pin="1234")
 
-    # When front door opens at night → alert
-    def on_door(event):
-        if event["event_type"] == "door_opened":
-            print(f"  🔔 ALERT: Front door was opened by {event['opened_by']}")
+    bus.subscribe("motion_detected", on_motion_event)
+    bus.subscribe("alarm_triggered", on_smoke_event)
+    bus.subscribe_all(log_all_events)   # wildcard — catches every topic
 
-    # Register the listeners
-    motion_sensor.add_listener(on_motion)
-    temp_sensor.add_listener(on_temperature)
-    smoke_sensor.add_listener(on_smoke)
-    door_sensor.add_listener(on_door)
+    # Wire sensors to the event bus (sensors publish, bus routes)
+    def publish_sensor_event(event):
+        bus.publish(event["event_type"], event)
 
-    # ----------------------------------------------------------------
-    # Turn on devices
-    # ----------------------------------------------------------------
+    motion_sensor.add_listener(publish_sensor_event)
+    smoke_sensor.add_listener(publish_sensor_event)
+
+    # Trigger events — watch the bus route them automatically
+    print()
     hall_light.turn_on()
-    hall_light.turn_off()   # start off — motion will turn it on
-    front_lock.turn_on()
     cam.turn_on()
-    thermo.turn_on()
-
-    # ----------------------------------------------------------------
-    # Simulate events
-    # ----------------------------------------------------------------
-
-    print("\n--- 🏃 SCENARIO 1: Motion in hallway ---")
     motion_sensor.detect_motion("Hallway")
-
-    print("\n--- 🕊️  SCENARIO 2: Hallway goes quiet ---")
-    motion_sensor.clear_motion()
-
-    print("\n--- 🌡️  SCENARIO 3: Kitchen gets cold ---")
-    temp_sensor.read_temperature(12.0)   # below 15°C threshold
-    temp_sensor.read_temperature(18.0)   # back to normal
-
-    print("\n--- 💨 SCENARIO 4: Smoke alarm in kitchen ---")
-    smoke_sensor.detect_smoke(120.0, carbon_monoxide=True)
-
-    print("\n--- 🚪 SCENARIO 5: Someone opens the front door ---")
-    door_sensor.open("Alice")
-    door_sensor.close("Alice")
+    smoke_sensor.detect_smoke(150.0, carbon_monoxide=True)
 
     # ----------------------------------------------------------------
-    # Show all sensor statuses
+    # PATTERN 4 — STRATEGY (EnergyManager)
+    # Swap the whole energy behaviour with one line
     # ----------------------------------------------------------------
-    print("\n--- 📊 SENSOR STATUS REPORT ---")
-    for sensor in [motion_sensor, temp_sensor, smoke_sensor, door_sensor]:
-        status = sensor.get_status()
-        print(f"  {status['type']:<22} | room: {status['room']:<12} | active: {status['active']}")
+    print("\n--- ⚡ PATTERN 4: STRATEGY (EnergyManager) ---")
 
-    print("\n✅ Part 3 complete: Sensors wired up with the Observer pattern!")
-    print("   Next → Part 4: Design Patterns (Factory, Singleton, Strategy) 🏗️\n")
+    manager  = EnergyManager()
+    all_devs = home.get_all_devices()
+
+    # Turn everything on first so strategies have something to work with
+    for d in all_devs:
+        d.turn_on()
+
+    manager.set_strategy("eco")
+    manager.apply(all_devs)
+
+    manager.set_strategy("night")
+    manager.apply(all_devs)
+
+    manager.set_strategy("away")
+    manager.apply(all_devs)
+
+    # Show final log
+    print("\n--- 📋 FINAL LOG SNAPSHOT ---")
+    Logger().print_recent(6)
+
+    print(f"\n✅ Part 4 complete: All 4 design patterns demonstrated!")
+    print(f"   Next → Part 5: Automation Engine 🤖\n")
 
 
 if __name__ == "__main__":

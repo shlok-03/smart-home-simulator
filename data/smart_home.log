@@ -1,0 +1,6 @@
+[2026-05-31T20:05:54] INFO     | main                      | Smart home system started
+[2026-05-31T20:05:54] INFO     | Factory                   | Created 5 devices via DeviceFactory
+[2026-05-31T20:05:54] WARNING  | main                      | This was logged via log_b — same object as log_a
+[2026-05-31T20:05:54] INFO     | EventBus                  | motion_detected from Hallway Motion
+[2026-05-31T20:05:54] INFO     | EventBus                  | smoke_detected from Kitchen Smoke
+[2026-05-31T20:05:54] INFO     | EventBus                  | alarm_triggered from Kitchen Smoke
